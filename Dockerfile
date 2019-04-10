@@ -9,10 +9,12 @@ FROM python:3.5-slim
 
 ## install:
 # -curl, tar, unzip (to get the FSL distribution)
+# -libquadmath0 (needed by FSL )
 RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     curl \
     tar \
     unzip \
+    libquadmath0 \
   && apt-get clean -y && apt-get autoclean -y && apt-get autoremove -y
 
 
