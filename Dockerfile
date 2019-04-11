@@ -9,11 +9,13 @@ FROM python:3.5-slim
 
 ## install:
 # -curl, tar, unzip (to get the FSL distribution)
-# -libquadmath0 (needed by FSL )
+# -bzip2 (to install the fslpython tools)
+# -libquadmath0 (needed to run many FSL commands )
 RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     curl \
     tar \
     unzip \
+    bzip2 \
     libquadmath0 \
   && apt-get clean -y && apt-get autoclean -y && apt-get autoremove -y
 
@@ -51,6 +53,8 @@ ENV FSLDIR=${INSTALL_FOLDER}/fsl/ \
 ENV PATH=${FSLDIR}/bin:$PATH \
     LD_LIBRARY_PATH=${FSLDIR}:${LD_LIBRARY_PATH}
 
+# Install fslpython
+RUN ${FSLDIR}/etc/fslconf/fslpython_install.sh
 
 # Overwrite the entrypoint of the base Docker image (python)
 ENTRYPOINT ["/bin/bash"]
