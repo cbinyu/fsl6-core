@@ -3,9 +3,12 @@
 # bones installation of the latest FSL (6.0).             #
 ###########################################################
 
+ARG DEBIAN_VERSION=stretch
+ARG BASE_PYTHON_VERSION=3.5
+# (don't use simply PYTHON_VERSION bc. it's an env variable)
 
 # Use an official Python runtime as a parent image
-FROM python:3.5-slim
+FROM python:${BASE_PYTHON_VERSION}-slim-${DEBIAN_VERSION}
 
 ## install:
 # -curl, tar, unzip (to get the FSL distribution)
@@ -13,9 +16,6 @@ FROM python:3.5-slim
 # -libquadmath0 (needed to run many FSL commands )
 RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     curl \
-    tar \
-    unzip \
-    bzip2 \
     libquadmath0 \
   && apt-get clean -y && apt-get autoclean -y && apt-get autoremove -y
 
