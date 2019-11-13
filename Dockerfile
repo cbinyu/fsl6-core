@@ -4,7 +4,7 @@
 ###########################################################
 
 ARG DEBIAN_VERSION=stretch
-ARG BASE_PYTHON_VERSION=3.5
+ARG BASE_PYTHON_VERSION=3.7
 # (don't use simply PYTHON_VERSION bc. it's an env variable)
 
 # Use an official Python runtime as a parent image
