@@ -4,7 +4,7 @@
 ###########################################################
 
 ARG DEBIAN_VERSION=buster
-ARG BASE_PYTHON_VERSION=3.7
+ARG BASE_PYTHON_VERSION=3.8
 # (don't use simply PYTHON_VERSION bc. it's an env variable)
 
 # Use an official Python runtime as a parent image
@@ -28,11 +28,11 @@ ENV INSTALL_FOLDER=/usr/local/
 
 # The following gives you a clean install of FSL to run in a CLI
 
-# install FSL 6.0.1:
+# install FSL 6.0.2:
 # "fslinstaller.py" only works for python 2.X.
 # We exclude atlases, etc, and gpu stuff (this image
 #   does not have CUDA):
-RUN curl -sSL https://fsl.fmrib.ox.ac.uk/fsldownloads/fsl-6.0.1-centos7_64.tar.gz | tar xz -C ${INSTALL_FOLDER} \
+RUN curl -sSL https://fsl.fmrib.ox.ac.uk/fsldownloads/fsl-6.0.2-centos7_64.tar.gz | tar xz -C ${INSTALL_FOLDER} \
     --exclude='fsl/doc' \
     --exclude='fsl/data/first' \    
     --exclude='fsl/data/atlases' \
@@ -54,7 +54,12 @@ ENV PATH=${FSLDIR}/bin:$PATH \
     LD_LIBRARY_PATH=${FSLDIR}:${LD_LIBRARY_PATH}
 
 # Install fslpython
-RUN ${FSLDIR}/etc/fslconf/fslpython_install.sh
+# (Potentially, we could also not install "vtk")
+# Also, you can probably do "${FSLDIR}/fslpython/bin/conda clean --all"
+RUN sed -i -e "/fsleyes/d" -e "/wxpython/d" ${FSLDIR}/etc/fslconf/fslpython_environment.yml && \
+    ${FSLDIR}/etc/fslconf/fslpython_install.sh && \
+    find ${FSLDIR}/fslpython/envs/fslpython/lib/python3.7/site-packages/ -type d -name "tests"  -print0 | xargs -0 rm -r && \
+    ${FSLDIR}/fslpython/bin/conda clean --all
 
 # Overwrite the entrypoint of the base Docker image (python)
 ENTRYPOINT ["/bin/bash"]
