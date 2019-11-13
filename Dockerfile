@@ -3,7 +3,7 @@
 # bones installation of the latest FSL (6.0).             #
 ###########################################################
 
-ARG DEBIAN_VERSION=stretch
+ARG DEBIAN_VERSION=buster
 ARG BASE_PYTHON_VERSION=3.7
 # (don't use simply PYTHON_VERSION bc. it's an env variable)
 
