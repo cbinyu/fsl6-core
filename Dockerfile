@@ -11,8 +11,7 @@ ARG BASE_PYTHON_VERSION=3.8
 FROM python:${BASE_PYTHON_VERSION}-slim-${DEBIAN_VERSION}
 
 ## install:
-# -curl, tar, unzip (to get the FSL distribution)
-# -bzip2 (to install the fslpython tools)
+# -curl (to get the FSL distribution)
 # -libquadmath0 (needed to run many FSL commands )
 RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     curl \
@@ -32,7 +31,7 @@ ENV INSTALL_FOLDER=/usr/local/
 # "fslinstaller.py" only works for python 2.X.
 # We exclude atlases, etc, and gpu stuff (this image
 #   does not have CUDA):
-RUN curl -sSL https://fsl.fmrib.ox.ac.uk/fsldownloads/fsl-6.0.2-centos7_64.tar.gz | tar xz -C ${INSTALL_FOLDER} \
+RUN curl -sSL https://fsl.fmrib.ox.ac.uk/fsldownloads/fsl-6.0.3-centos7_64.tar.gz | tar xz -C ${INSTALL_FOLDER} \
     --exclude='fsl/doc' \
     --exclude='fsl/data/first' \    
     --exclude='fsl/data/atlases' \
