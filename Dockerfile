@@ -56,6 +56,7 @@ ENV PATH=${FSLDIR}/bin:$PATH \
 # (Potentially, we could also not install "vtk")
 # Also, you can probably do "${FSLDIR}/fslpython/bin/conda clean --all"
 RUN sed -i -e "/fsleyes/d" -e "/wxpython/d" ${FSLDIR}/etc/fslconf/fslpython_environment.yml && \
+    sed -i -e "s/repo.continuum.io/repo.anaconda.com/" ${FSLDIR}/etc/fslconf/fslpython_install.sh && \
     ${FSLDIR}/etc/fslconf/fslpython_install.sh && \
     find ${FSLDIR}/fslpython/envs/fslpython/lib/python3.7/site-packages/ -type d -name "tests"  -print0 | xargs -0 rm -r && \
     ${FSLDIR}/fslpython/bin/conda clean --all
