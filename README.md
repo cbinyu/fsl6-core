@@ -10,4 +10,9 @@ It doesn't include:
 - gpu tools
 - Fsleyes
 
+Although smaller in size than a full install of FSL, it still is huge (~9.5 GB).
+
+It is intended as a `base` for building other docker images, by copying from `fsl6-core` just the tools needed (see this [`Dockerfile`](https://github.com/cbinyu/pydeface/blob/master/Dockerfile) as an example).
+
+
 By using this software you agree to [FSL's license](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/Licence)
