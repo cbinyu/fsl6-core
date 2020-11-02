@@ -3,19 +3,26 @@
 # bones installation of the latest FSL (6.0).             #
 ###########################################################
 
+###   Start by creating a "builder"   ###
+
 ARG DEBIAN_VERSION=buster
 ARG BASE_PYTHON_VERSION=3.8
 # (don't use simply PYTHON_VERSION bc. it's an env variable)
+ARG FSL_VERSION=6.0.4
 
 # Use an official Python runtime as a parent image
-FROM python:${BASE_PYTHON_VERSION}-slim-${DEBIAN_VERSION}
+FROM python:${BASE_PYTHON_VERSION}-slim-${DEBIAN_VERSION} as builder
 
 ## install:
 # -curl (to get the FSL distribution)
 # -libquadmath0 (needed to run many FSL commands )
+# -bc
+# -dc
 RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     curl \
     libquadmath0 \
+    bc \
+    dc \
   && apt-get clean -y && apt-get autoclean -y && apt-get autoremove -y
 
 
@@ -27,11 +34,13 @@ ENV INSTALL_FOLDER=/usr/local/
 
 # The following gives you a clean install of FSL to run in a CLI
 
-# install FSL 6.0.2:
+# install FSL:
 # "fslinstaller.py" only works for python 2.X.
 # We exclude atlases, etc, and gpu stuff (this image
 #   does not have CUDA):
-RUN curl -sSL https://fsl.fmrib.ox.ac.uk/fsldownloads/fsl-6.0.3-centos7_64.tar.gz | tar xz -C ${INSTALL_FOLDER} \
+# This makes the BASE_PYTHON_VERSION available inside this stage
+ARG FSL_VERSION
+RUN curl -sSL https://fsl.fmrib.ox.ac.uk/fsldownloads/fsl-${FSL_VERSION}-centos7_64.tar.gz | tar xz -C ${INSTALL_FOLDER} \
     --exclude='fsl/doc' \
     --exclude='fsl/data/first' \    
     --exclude='fsl/data/atlases' \
@@ -54,12 +63,71 @@ ENV PATH=${FSLDIR}/bin:$PATH \
 
 # Install fslpython
 # (Potentially, we could also not install "vtk")
-# Also, you can probably do "${FSLDIR}/fslpython/bin/conda clean --all"
 RUN sed -i -e "/fsleyes/d" -e "/wxpython/d" ${FSLDIR}/etc/fslconf/fslpython_environment.yml && \
     sed -i -e "s/repo.continuum.io/repo.anaconda.com/" ${FSLDIR}/etc/fslconf/fslpython_install.sh && \
     ${FSLDIR}/etc/fslconf/fslpython_install.sh && \
-    find ${FSLDIR}/fslpython/envs/fslpython/lib/python3.7/site-packages/ -type d -name "tests"  -print0 | xargs -0 rm -r && \
+    find ${FSLDIR}/fslpython/envs/fslpython/lib/python3.7/site-packages/ -type d \( \
+        -name "tests" \
+	-o -name "test_files" \
+	-o -name "test_data" \
+	-o -name "sample_data" \
+    \) -print0 | xargs -0 rm -r && \
+    for pkg in botocore pylint awscli jedi PyQt5 skimage/data tvtk; do \
+      rm -fr ${FSLDIR}/fslpython/envs/fslpython/lib/python3.7/site-packages/$pkg; \
+    done && \
+    rm -r ${FSLDIR}/fslpython/pkgs/* && \
+    for d in example resources/testimage resources/fsl; do \
+      rm -r ${FSLDIR}/fslpython/envs/fslpython/lib/python3.7/site-packages/tirl/share/$d; \
+    done && \
+    rm -r ${FSLDIR}/fslpython/envs/fslpython/bin/pandoc* \
+          ${FSLDIR}/fslpython/envs/fslpython/bin/qmake && \
+    rm -r ${FSLDIR}/fslpython/envs/fslpython/include/qt \
+          ${FSLDIR}/fslpython/envs/fslpython/include/vtk* && \
+    for d in doc qt/3rd_party_licenses gir-1.0; do \
+      rm -r ${FSLDIR}/fslpython/envs/fslpython/share/$d; \
+    done && \
+    rm -r ${FSLDIR}/fslpython/envs/fslpython/translations/qt* && \
+    for t in imcp imglob immv; do \
+      ln -s ${FSLDIR}/fslpython/envs/fslpython/bin/${t} ${FSLDIR}/bin/ ; \
+    done && \
     ${FSLDIR}/fslpython/bin/conda clean --all
+
+RUN rm -r ${FSLDIR}/fslpython/envs/fslpython/resources/qtwebengine* \
+          ${FSLDIR}/fslpython/envs/fslpython/conda-meta/vtk* \
+          ${FSLDIR}/fslpython/envs/fslpython/lib/libQt5* \
+          ${FSLDIR}/fslpython/envs/fslpython/lib/cmake \
+          ${FSLDIR}/fslpython/envs/fslpython/lib/libavcodec.a
+
+
+#############
+
+###  Now, get a new machine with only the essentials  ###
+FROM python:${BASE_PYTHON_VERSION}-slim-${DEBIAN_VERSION} as Application
+
+# This makes the BASE_PYTHON_VERSION available inside this stage
+ARG BASE_PYTHON_VERSION
+ENV PYTHON_LIB_PATH=/usr/local/lib/python${BASE_PYTHON_VERSION}
+
+ENV FSLDIR=/usr/local/fsl/ \
+    FSLOUTPUTTYPE=NIFTI_GZ
+ENV PATH=${FSLDIR}/bin:$PATH \
+    LD_LIBRARY_PATH=${FSLDIR}:${LD_LIBRARY_PATH}
+
+# Copy system binaries and libraries:
+COPY --from=builder ./lib/x86_64-linux-gnu/     /lib/x86_64-linux-gnu/
+COPY --from=builder ./usr/lib/x86_64-linux-gnu/ /usr/lib/x86_64-linux-gnu/
+COPY --from=builder ./usr/bin/                  /usr/bin/
+COPY --from=builder ./usr/local/bin/           /usr/local/bin/
+# COPY --from=builder ./${PYTHON_LIB_PATH}/site-packages/      ${PYTHON_LIB_PATH}/site-packages/
+
+# Copy $FSLDIR:
+COPY --from=builder ./${FSLDIR}/  ${FSLDIR}/
+
+## Copy an extra library needed by FSL:
+#COPY --from=builder ./usr/lib/x86_64-linux-gnu/libquadmath.so.0     \
+#                    ./usr/lib/x86_64-linux-gnu/libquadmath.so.0.0.0 \
+#                                    /usr/lib/x86_64-linux-gnu/
+
 
 # Overwrite the entrypoint of the base Docker image (python)
 ENTRYPOINT ["/bin/bash"]
