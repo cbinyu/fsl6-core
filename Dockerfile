@@ -98,6 +98,13 @@ RUN rm -r ${FSLDIR}/fslpython/envs/fslpython/resources/qtwebengine* \
           ${FSLDIR}/fslpython/envs/fslpython/lib/cmake \
           ${FSLDIR}/fslpython/envs/fslpython/lib/libavcodec.a
 
+RUN for l in libopenblas libopenblas64 libopenblas64_ libopenblaso libopenblaso64 libopenblasp libopenblasp64 libopenblasp64_; do \
+    # if they are the same, delete and link: \
+    diff ${FSLDIR}/lib/${l}.so ${FSLDIR}/lib/${l}.so.0 && rm ${FSLDIR}/lib/${l}.so && ln -s ./${l}.so.0 ${FSLDIR}/lib/${l}.so ; \
+    diff ${FSLDIR}/lib/${l}.so.0 ${FSLDIR}/lib/${l}-r0.3.3.so && rm ${FSLDIR}/lib/${l}.so.0 && ln -s ./${l}-r0.3.3.so ${FSLDIR}/lib/${l}.so.0 ; \
+done && \
+  rm -r ${FSLDIR}/lib/libbedpostx_cuda.so && \
+  rm -r ${FSLDIR}/lib/libvtk* ${FSLDIR}/lib/libqwt.* ${FSLDIR}/lib/libfslvtkio.*
 
 #############
 
