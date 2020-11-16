@@ -58,7 +58,8 @@ ENV FSLDIR=${INSTALL_FOLDER}/fsl/ \
     FSLOUTPUTTYPE=NIFTI_GZ
 # (Note: the following cannot be included in the same one-line with
 #        the above, since it depends on the previous variables)
-ENV PATH=${FSLDIR}/bin:$PATH \
+ENV FSL_PYTHON=${FSLDIR}/fslpython/envs/fslpython \
+    PATH=${FSLDIR}/bin:$PATH \
     LD_LIBRARY_PATH=${FSLDIR}:${LD_LIBRARY_PATH}
 
 # Install fslpython
@@ -66,45 +67,114 @@ ENV PATH=${FSLDIR}/bin:$PATH \
 RUN sed -i -e "/fsleyes/d" -e "/wxpython/d" ${FSLDIR}/etc/fslconf/fslpython_environment.yml && \
     sed -i -e "s/repo.continuum.io/repo.anaconda.com/" ${FSLDIR}/etc/fslconf/fslpython_install.sh && \
     ${FSLDIR}/etc/fslconf/fslpython_install.sh && \
-    find ${FSLDIR}/fslpython/envs/fslpython/lib/python3.7/site-packages/ -type d \( \
+    find ${FSL_PYTHON}/lib/python3.7/site-packages/ -type d \( \
         -name "tests" \
 	-o -name "test_files" \
 	-o -name "test_data" \
 	-o -name "sample_data" \
     \) -print0 | xargs -0 rm -r && \
     for pkg in botocore pylint awscli jedi PyQt5 skimage/data tvtk; do \
-      rm -fr ${FSLDIR}/fslpython/envs/fslpython/lib/python3.7/site-packages/$pkg; \
+      rm -fr ${FSL_PYTHON}/lib/python3.7/site-packages/$pkg; \
     done && \
     rm -r ${FSLDIR}/fslpython/pkgs/* && \
     for d in example resources/testimage resources/fsl; do \
-      rm -r ${FSLDIR}/fslpython/envs/fslpython/lib/python3.7/site-packages/tirl/share/$d; \
+      rm -r ${FSL_PYTHON}/lib/python3.7/site-packages/tirl/share/$d; \
     done && \
-    rm -r ${FSLDIR}/fslpython/envs/fslpython/bin/pandoc* \
-          ${FSLDIR}/fslpython/envs/fslpython/bin/qmake && \
-    rm -r ${FSLDIR}/fslpython/envs/fslpython/include/qt \
-          ${FSLDIR}/fslpython/envs/fslpython/include/vtk* && \
+    rm -r ${FSL_PYTHON}/bin/pandoc* \
+          ${FSL_PYTHON}/bin/qmake && \
+    rm -r ${FSL_PYTHON}/include/qt \
+          ${FSL_PYTHON}/include/vtk* && \
     for d in doc qt/3rd_party_licenses gir-1.0; do \
-      rm -r ${FSLDIR}/fslpython/envs/fslpython/share/$d; \
+      rm -r ${FSL_PYTHON}/share/$d; \
     done && \
-    rm -r ${FSLDIR}/fslpython/envs/fslpython/translations/qt* && \
+    rm -r ${FSL_PYTHON}/translations/qt* && \
     for t in imcp imglob immv; do \
-      ln -s ${FSLDIR}/fslpython/envs/fslpython/bin/${t} ${FSLDIR}/bin/ ; \
+      ln -s ${FSL_PYTHON}/bin/${t} ${FSLDIR}/bin/ ; \
     done && \
     ${FSLDIR}/fslpython/bin/conda clean --all
 
-RUN rm -r ${FSLDIR}/fslpython/envs/fslpython/resources/qtwebengine* \
-          ${FSLDIR}/fslpython/envs/fslpython/conda-meta/vtk* \
-          ${FSLDIR}/fslpython/envs/fslpython/lib/libQt5* \
-          ${FSLDIR}/fslpython/envs/fslpython/lib/cmake \
-          ${FSLDIR}/fslpython/envs/fslpython/lib/libavcodec.a
+RUN rm -r ${FSL_PYTHON}/resources/qtwebengine* \
+          ${FSL_PYTHON}/conda-meta/vtk* \
+          ${FSL_PYTHON}/lib/libQt5* \
+          ${FSL_PYTHON}/lib/cmake \
+          ${FSL_PYTHON}/lib/libavcodec.a
 
-RUN for l in libopenblas libopenblas64 libopenblas64_ libopenblaso libopenblaso64 libopenblasp libopenblasp64 libopenblasp64_; do \
-    # if they are the same, delete and link: \
-    diff ${FSLDIR}/lib/${l}.so ${FSLDIR}/lib/${l}.so.0 && rm ${FSLDIR}/lib/${l}.so && ln -s ./${l}.so.0 ${FSLDIR}/lib/${l}.so ; \
-    diff ${FSLDIR}/lib/${l}.so.0 ${FSLDIR}/lib/${l}-r0.3.3.so && rm ${FSLDIR}/lib/${l}.so.0 && ln -s ./${l}-r0.3.3.so ${FSLDIR}/lib/${l}.so.0 ; \
-done && \
-  rm -r ${FSLDIR}/lib/libbedpostx_cuda.so && \
-  rm -r ${FSLDIR}/lib/libvtk* ${FSLDIR}/lib/libqwt.* ${FSLDIR}/lib/libfslvtkio.*
+# FSL has many OpenBLAS, OSMesa, etc. libraries that are identical.
+# We'll link them. Because Docker doesn't reduce the file size when you
+# do a COPY --from=, I'll write a script with the linking process which
+# we'll run at the Application stage. (In the first line, use single
+# quotes so that the shell doesn't execute "!"):
+RUN echo '#!/bin/bash' > /create_links.sh && \
+  # extend globbing: \
+  bash -O extglob -c ' \
+    for l in ${FSLDIR}/lib/libopenblas*(64|64_|o|p).so; do \
+      # if they are the same, delete and save command to link: \
+      diff ${l} ${l}.0 \
+        && rm ${l} \
+        && echo "ln -s ./$(basename ${l}).0 ${l}" >> /create_links.sh ; \
+      diff ${l}.0 ${l%.so}-r0.3.3.so \
+        && rm ${l}.0 \
+        && echo "ln -s ./$(basename ${l%.so})-r0.3.3.so ${l}.0" >> /create_links.sh ; \
+    done && \
+    for l in ${FSLDIR}/lib/libOSMesa*(16|32).so ${FSLDIR}/lib/libQVTK.so; do \
+      fullVersion=$(ls ${l}.?.?.*); \
+      minVersion=${fullVersion%.*}; \
+      majVersion=${minVersion%.*}; \
+      # if there is a major/minor version, that's the version to use: \
+      [ -f ${minVersion} ] && version=${minVersion}; \
+      [ -f ${majVersion} ] && version=${majVersion}; \
+      if [ X$version != X ]; then \
+        # if they are the same, delete and create link: \
+        diff ${l} ${version} \
+          && rm ${l} \
+          && echo "ln -s ./$(basename ${version}) ${l}" >> /create_links.sh ; \
+        diff ${version} ${fullVersion} \
+          && rm ${version} \
+          && echo "ln -s ./$(basename ${fullVersion}) ${version}" >> /create_links.sh ; \
+      fi \
+    done && \
+    for l in ${FSLDIR}/lib/libgfortran.so.?; do \
+      diff ${l} ${l}.0.0 \
+        && rm ${l} \
+        && echo "ln -s ./$(basename ${l}).0.0 ${l}" >> /create_links.sh ; \
+    done && \
+    for l in ${FSL_PYTHON}/lib/libclang.so; do \
+      diff ${l} ${l}.9 \
+        && rm ${l} \
+        && echo "ln -s ./$(basename ${l}).9 ${l}" >> /create_links.sh ; \
+    done && \
+    for l in ${FSL_PYTHON}/share/jupyter/nbextensions/plotlywidget; do \
+      diff ${l} ${FSL_PYTHON}/lib/python3.7/site-packages/$(basename ${l})/static/ \
+        && rm -r ${l} \
+        && echo "ln -s ${FSL_PYTHON}/lib/python3.7/site-packages/$(basename ${l})/static ${l}" >> /create_links.sh ; \
+    done && \
+    for static_l in ${FSLDIR}/extras/include/boost/bin.v2/libs/*/build/gcc-4.8.5/release/link-static/threading-multi/*.[ao] ${FSLDIR}/extras/include/boost/bin.v2/libs/log/build/gcc-4.8.5/release/link-static/log-api-unix/threading-multi/libboost_log*.a; do \
+      l=${FSLDIR}/extras/lib/$(basename ${static_l}); \
+      [ -f $l ] && diff ${l} ${static_l} \
+        && rm -r ${l} \
+        && echo "ln -s ${static_l} ${l}" >> /create_links.sh ; \
+    done && \
+    for r in ${FSLDIR}/data/xtract_data/standard/F99/surf/rh*; do \
+      diff ${r} ${r/rh./R.} \
+        && rm -r ${r} \
+        && echo "ln -s ${r/rh./R.} ${r}" >> /create_links.sh ; \
+    done && \
+    for l in ${FSLDIR}/data/xtract_data/standard/F99/surf/lh*; do \
+      diff ${l} ${l/lh./L.} \
+        && rm -r ${l} \
+        && echo "ln -s ${l/lh./L.} ${l}" >> /create_links.sh ; \
+    done && \
+    diff ${FSL_PYTHON}/share/jupyter/nbextensions/jupyter-js-widgets \
+        ${FSL_PYTHON}/lib/python3.7/site-packages/widgetsnbextension/static \
+      && rm -r ${FSL_PYTHON}/share/jupyter/nbextensions/jupyter-js-widgets \
+      && echo "ln -s ${FSL_PYTHON}/lib/python3.7/site-packages/widgetsnbextension/static ${FSL_PYTHON}/share/jupyter/nbextensions/jupyter-js-widgets" >> /create_links.sh && \
+    diff ${FSL_PYTHON}/lib/python3.7/ensurepip/_bundled ${FSLDIR}/fslpython/lib/python3.8/ensurepip/_bundled \
+      && rm -r ${FSLDIR}/fslpython/lib/python3.8/ensurepip/_bundled \
+      && echo "ln -s ${FSL_PYTHON}/lib/python3.7/ensurepip/_bundled ${FSLDIR}/fslpython/lib/python3.8/ensurepip/_bundled" >> /create_links.sh && \
+    rm -r ${FSLDIR}/lib/libbedpostx_cuda.so && \
+    rm -r ${FSLDIR}/lib/libvtk* ${FSLDIR}/lib/libqwt.* ${FSLDIR}/lib/libfslvtkio.*\
+  '     # end of "bash -0 extglob..."
+
 
 #############
 
@@ -130,10 +200,10 @@ COPY --from=builder ./usr/local/bin/           /usr/local/bin/
 # Copy $FSLDIR:
 COPY --from=builder ./${FSLDIR}/  ${FSLDIR}/
 
-## Copy an extra library needed by FSL:
-#COPY --from=builder ./usr/lib/x86_64-linux-gnu/libquadmath.so.0     \
-#                    ./usr/lib/x86_64-linux-gnu/libquadmath.so.0.0.0 \
-#                                    /usr/lib/x86_64-linux-gnu/
+# Create the links:
+COPY --from=builder ./create_links.sh  /create_links.sh
+RUN chmod u+x /create_links.sh && \
+    /create_links.sh
 
 
 # Overwrite the entrypoint of the base Docker image (python)
