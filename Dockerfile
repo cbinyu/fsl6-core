@@ -5,8 +5,8 @@
 
 ###   Start by creating a "builder"   ###
 
-ARG DEBIAN_VERSION=buster
-ARG BASE_PYTHON_VERSION=3.8
+ARG DEBIAN_VERSION=bullseye
+ARG BASE_PYTHON_VERSION=3.10
 # (don't use simply PYTHON_VERSION bc. it's an env variable)
 ARG FSL_VERSION=6.0.4
 
@@ -37,7 +37,7 @@ ENV INSTALL_FOLDER=/usr/local/
 # install FSL:
 # "fslinstaller.py" only works for python 2.X.
 # We exclude atlases, etc, and gpu stuff (this image
-#   does not have CUDA):
+#   does not have CUDA)
 # This makes the BASE_PYTHON_VERSION available inside this stage
 ARG FSL_VERSION
 RUN curl -sSL https://fsl.fmrib.ox.ac.uk/fsldownloads/fsl-${FSL_VERSION}-centos7_64.tar.gz | tar xz -C ${INSTALL_FOLDER} \
@@ -96,8 +96,7 @@ RUN sed -i -e "/fsleyes/d" -e "/wxpython/d" ${FSLDIR}/etc/fslconf/fslpython_envi
 RUN rm -r ${FSL_PYTHON}/resources/qtwebengine* \
           ${FSL_PYTHON}/conda-meta/vtk* \
           ${FSL_PYTHON}/lib/libQt5* \
-          ${FSL_PYTHON}/lib/cmake \
-          ${FSL_PYTHON}/lib/libavcodec.a
+          ${FSL_PYTHON}/lib/cmake
 
 # FSL has many OpenBLAS, OSMesa, etc. libraries that are identical.
 # We'll link them. Because Docker doesn't reduce the file size when you
@@ -143,10 +142,10 @@ RUN echo '#!/bin/bash' > /create_links.sh && \
         && rm ${l} \
         && echo "ln -s ./$(basename ${l}).9 ${l}" >> /create_links.sh ; \
     done && \
-    for l in ${FSL_PYTHON}/share/jupyter/nbextensions/plotlywidget; do \
-      diff ${l} ${FSL_PYTHON}/lib/python3.7/site-packages/$(basename ${l})/static/ \
+    for l in ${FSL_PYTHON}/share/jupyter/nbextensions/jupyterlab-plotly; do \
+      diff ${l} ${FSL_PYTHON}/lib/python3.7/site-packages/jupyterlab_plotly/nbextension \
         && rm -r ${l} \
-        && echo "ln -s ${FSL_PYTHON}/lib/python3.7/site-packages/$(basename ${l})/static ${l}" >> /create_links.sh ; \
+        && echo "ln -s ${FSL_PYTHON}/lib/python3.7/site-packages/jupyterlab_plotly/nbextension ${l}" >> /create_links.sh ; \
     done && \
     for static_l in ${FSLDIR}/extras/include/boost/bin.v2/libs/*/build/gcc-4.8.5/release/link-static/threading-multi/*.[ao] ${FSLDIR}/extras/include/boost/bin.v2/libs/log/build/gcc-4.8.5/release/link-static/log-api-unix/threading-multi/libboost_log*.a; do \
       l=${FSLDIR}/extras/lib/$(basename ${static_l}); \
@@ -168,9 +167,6 @@ RUN echo '#!/bin/bash' > /create_links.sh && \
         ${FSL_PYTHON}/lib/python3.7/site-packages/widgetsnbextension/static \
       && rm -r ${FSL_PYTHON}/share/jupyter/nbextensions/jupyter-js-widgets \
       && echo "ln -s ${FSL_PYTHON}/lib/python3.7/site-packages/widgetsnbextension/static ${FSL_PYTHON}/share/jupyter/nbextensions/jupyter-js-widgets" >> /create_links.sh && \
-    diff ${FSL_PYTHON}/lib/python3.7/ensurepip/_bundled ${FSLDIR}/fslpython/lib/python3.8/ensurepip/_bundled \
-      && rm -r ${FSLDIR}/fslpython/lib/python3.8/ensurepip/_bundled \
-      && echo "ln -s ${FSL_PYTHON}/lib/python3.7/ensurepip/_bundled ${FSLDIR}/fslpython/lib/python3.8/ensurepip/_bundled" >> /create_links.sh && \
     rm -r ${FSLDIR}/lib/libbedpostx_cuda.so && \
     rm -r ${FSLDIR}/lib/libvtk* ${FSLDIR}/lib/libqwt.* ${FSLDIR}/lib/libfslvtkio.*\
   '     # end of "bash -0 extglob..."
@@ -207,4 +203,4 @@ RUN chmod u+x /create_links.sh && \
 
 
 # Overwrite the entrypoint of the base Docker image (python)
-ENTRYPOINT ["/bin/bash"]
+ENTRYPOINT ["/bin/bash", "-l", "-c" ]
