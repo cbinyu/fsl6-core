@@ -142,10 +142,11 @@ RUN echo '#!/bin/bash' > /create_links.sh && \
         && rm ${l} \
         && echo "ln -s ./$(basename ${l}).9 ${l}" >> /create_links.sh ; \
     done && \
-    for l in ${FSL_PYTHON}/share/jupyter/nbextensions/jupyterlab-plotly; do \
-      diff ${l} ${FSL_PYTHON}/lib/python3.7/site-packages/jupyterlab_plotly/nbextension \
-        && rm -r ${l} \
-        && echo "ln -s ${FSL_PYTHON}/lib/python3.7/site-packages/jupyterlab_plotly/nbextension ${l}" >> /create_links.sh ; \
+    for shared_l in ${FSL_PYTHON}/share/jupyter/*extensions/jupyterlab-plotly; do \
+      l=${FSL_PYTHON}/lib/python3.7/site-packages/jupyterlab_plotly/$(basename ${shared_l%s/jupyterlab-plotly}) \
+        && diff ${shared_l} ${l} \
+        && rm -r ${shared_l} \
+        && echo "ln -s ${l} ${shared_l}" >> /create_links.sh ; \
     done && \
     for static_l in ${FSLDIR}/extras/include/boost/bin.v2/libs/*/build/gcc-4.8.5/release/link-static/threading-multi/*.[ao] ${FSLDIR}/extras/include/boost/bin.v2/libs/log/build/gcc-4.8.5/release/link-static/log-api-unix/threading-multi/libboost_log*.a; do \
       l=${FSLDIR}/extras/lib/$(basename ${static_l}); \
@@ -156,13 +157,22 @@ RUN echo '#!/bin/bash' > /create_links.sh && \
     for r in ${FSLDIR}/data/xtract_data/standard/F99/surf/rh*; do \
       diff ${r} ${r/rh./R.} \
         && rm -r ${r} \
-        && echo "ln -s ${r/rh./R.} ${r}" >> /create_links.sh ; \
+        && echo "ln -s ./$(basename ${r/rh./R.}) ${r}" >> /create_links.sh ; \
     done && \
     for l in ${FSLDIR}/data/xtract_data/standard/F99/surf/lh*; do \
       diff ${l} ${l/lh./L.} \
         && rm -r ${l} \
-        && echo "ln -s ${l/lh./L.} ${l}" >> /create_links.sh ; \
+        && echo "ln -s ./$(basename ${l/lh./L.}) ${l}" >> /create_links.sh ; \
     done && \
+    for l in ${FSLDIR}/data/xtract_data/standard/F99/surf/[LR].fiducial.surf.gii; do \
+      diff ${l} ${l/fiducial./midthickness.} \
+        && rm -r ${l} \
+        && echo "ln -s ./$(basename ${l/fiducial./midthickness.}) ${l}" >> /create_links.sh ; \
+    done && \
+    diff ${FSLDIR}/data/xtract_data/standard/F99/surf/midthickness \
+        ${FSLDIR}/data/xtract_data/standard/F99/surf/R.midthickness.surf.gii \
+      && rm ${FSLDIR}/data/xtract_data/standard/F99/surf/midthickness \
+      && echo "ln -s R.fiducial.surf.gii ${FSLDIR}/data/xtract_data/standard/F99/surf/midthickness" >> /create_links.sh && \
     diff ${FSL_PYTHON}/share/jupyter/nbextensions/jupyter-js-widgets \
         ${FSL_PYTHON}/lib/python3.7/site-packages/widgetsnbextension/static \
       && rm -r ${FSL_PYTHON}/share/jupyter/nbextensions/jupyter-js-widgets \
