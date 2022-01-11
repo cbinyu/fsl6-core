@@ -8,7 +8,7 @@
 ARG DEBIAN_VERSION=bullseye
 ARG BASE_PYTHON_VERSION=3.10
 # (don't use simply PYTHON_VERSION bc. it's an env variable)
-ARG FSL_VERSION=6.0.4
+ARG FSL_VERSION=6.0.5.1
 
 # Use an official Python runtime as a parent image
 FROM python:${BASE_PYTHON_VERSION}-slim-${DEBIAN_VERSION} as builder
@@ -67,19 +67,16 @@ ENV FSL_PYTHON=${FSLDIR}/fslpython/envs/fslpython \
 RUN sed -i -e "/fsleyes/d" -e "/wxpython/d" ${FSLDIR}/etc/fslconf/fslpython_environment.yml && \
     sed -i -e "s/repo.continuum.io/repo.anaconda.com/" ${FSLDIR}/etc/fslconf/fslpython_install.sh && \
     ${FSLDIR}/etc/fslconf/fslpython_install.sh && \
-    find ${FSL_PYTHON}/lib/python3.7/site-packages/ -type d \( \
+    find ${FSL_PYTHON}/lib/python3.?/site-packages/ -type d \( \
         -name "tests" \
 	-o -name "test_files" \
 	-o -name "test_data" \
 	-o -name "sample_data" \
     \) -print0 | xargs -0 rm -r && \
     for pkg in botocore pylint awscli jedi PyQt5 skimage/data tvtk; do \
-      rm -fr ${FSL_PYTHON}/lib/python3.7/site-packages/$pkg; \
+      rm -fr ${FSL_PYTHON}/lib/python3.?/site-packages/$pkg; \
     done && \
     rm -r ${FSLDIR}/fslpython/pkgs/* && \
-    for d in example resources/testimage resources/fsl; do \
-      rm -r ${FSL_PYTHON}/lib/python3.7/site-packages/tirl/share/$d; \
-    done && \
     rm -r ${FSL_PYTHON}/bin/pandoc* \
           ${FSL_PYTHON}/bin/qmake && \
     rm -r ${FSL_PYTHON}/include/qt \
@@ -138,17 +135,20 @@ RUN echo '#!/bin/bash' > /create_links.sh && \
         && echo "ln -s ./$(basename ${l}).0.0 ${l}" >> /create_links.sh ; \
     done && \
     for l in ${FSL_PYTHON}/lib/libclang.so; do \
-      diff ${l} ${l}.9 \
+      ref_l=${l}.*; \
+      diff ${l} ${ref_l} \
         && rm ${l} \
-        && echo "ln -s ./$(basename ${l}).9 ${l}" >> /create_links.sh ; \
+        && echo "ln -s ./$(basename ${ref_l}) ${l}" >> /create_links.sh ; \
     done && \
-    for shared_l in ${FSL_PYTHON}/share/jupyter/*extensions/jupyterlab-plotly; do \
-      l=${FSL_PYTHON}/lib/python3.7/site-packages/jupyterlab_plotly/$(basename ${shared_l%s/jupyterlab-plotly}) \
+    for pref in nb lab; do \
+      for shared_l in $(find ${FSL_PYTHON}/share/jupyter/${pref}extensions/jupyterlab-plotly/ -name "*.js*"); do \
+        l=${FSL_PYTHON}/lib/python3.?/site-packages/jupyterlab_plotly/${pref}extension/${shared_l#*jupyterlab-plotly} \
         && diff ${shared_l} ${l} \
         && rm -r ${shared_l} \
         && echo "ln -s ${l} ${shared_l}" >> /create_links.sh ; \
+      done; \
     done && \
-    for static_l in ${FSLDIR}/extras/include/boost/bin.v2/libs/*/build/gcc-4.8.5/release/link-static/threading-multi/*.[ao] ${FSLDIR}/extras/include/boost/bin.v2/libs/log/build/gcc-4.8.5/release/link-static/log-api-unix/threading-multi/libboost_log*.a; do \
+    for static_l in ${FSLDIR}/extras/include/boost/bin.v?/libs/*/build/gcc-?.?.?/release/link-static/threading-multi/*.[ao] ${FSLDIR}/extras/include/boost/bin.v?/libs/log/build/gcc-?.?.?/release/link-static/log-api-unix/threading-multi/libboost_log*.a; do \
       l=${FSLDIR}/extras/lib/$(basename ${static_l}); \
       [ -f $l ] && diff ${l} ${static_l} \
         && rm -r ${l} \
@@ -173,10 +173,14 @@ RUN echo '#!/bin/bash' > /create_links.sh && \
         ${FSLDIR}/data/xtract_data/standard/F99/surf/R.midthickness.surf.gii \
       && rm ${FSLDIR}/data/xtract_data/standard/F99/surf/midthickness \
       && echo "ln -s R.fiducial.surf.gii ${FSLDIR}/data/xtract_data/standard/F99/surf/midthickness" >> /create_links.sh && \
+    diff ${FSL_PYTHON}/data/tirl/share/resources/fsl/MNI152_T1_2mm.nii.gz \
+        ${FSLDIR}/data/standard/MNI152_T1_2mm.nii.gz \
+      && rm ${FSL_PYTHON}/data/tirl/share/resources/fsl/MNI152_T1_2mm.nii.gz \
+      && echo "ln -s ${FSLDIR}/data/standard/MNI152_T1_2mm.nii.gz ${FSL_PYTHON}/data/tirl/share/resources/fsl/MNI152_T1_2mm.nii.gz" >> /create_links.sh && \
     diff ${FSL_PYTHON}/share/jupyter/nbextensions/jupyter-js-widgets \
-        ${FSL_PYTHON}/lib/python3.7/site-packages/widgetsnbextension/static \
+        ${FSL_PYTHON}/lib/python3.?/site-packages/widgetsnbextension/static \
       && rm -r ${FSL_PYTHON}/share/jupyter/nbextensions/jupyter-js-widgets \
-      && echo "ln -s ${FSL_PYTHON}/lib/python3.7/site-packages/widgetsnbextension/static ${FSL_PYTHON}/share/jupyter/nbextensions/jupyter-js-widgets" >> /create_links.sh && \
+      && echo "ln -s ${FSL_PYTHON}/lib/python3.?/site-packages/widgetsnbextension/static ${FSL_PYTHON}/share/jupyter/nbextensions/jupyter-js-widgets" >> /create_links.sh && \
     rm -r ${FSLDIR}/lib/libbedpostx_cuda.so && \
     rm -r ${FSLDIR}/lib/libvtk* ${FSLDIR}/lib/libqwt.* ${FSLDIR}/lib/libfslvtkio.*\
   '     # end of "bash -0 extglob..."
